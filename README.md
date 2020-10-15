@@ -200,3 +200,4 @@ Content-Length: 579
 
 * [@jenic](https://github.com/jenic) - Arguments parsing and false negative reduction.
 * [@gremwell](https://github.com/gremwell) - Original script author
+* [@BarrelTit0r](https://github.com/BarrelTit0r) - Enhancement and refinement of user enumeration functionality
