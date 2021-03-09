@@ -35,6 +35,11 @@ notreal@badomain.com UNKNOWN_DOMAIN
 
 For companies that use on premise Exchange servers or some hybrid deployment and based on some configuration I haven't identified yet, the script will return DOMAIN_NOT_SUPPORTED.
 
+### Throttling
+
+Based on testing, Office.com will allow 100 user checks before you are throttled. Once throttling has started, Office.com will start to give a
+VALID_USER response to each request. 
+
 ### Existing User
 
 When the account exists, `IfExistsResult` is set to 0, 5, or 6.
