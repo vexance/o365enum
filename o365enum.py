@@ -208,6 +208,7 @@ if __name__ == "__main__":
             
             users = load_usernames(args.users, args.domain)
             o365enum_office(users, endpoint)
+            delete_fireprox_apis(fp)
         except Exception as err: # Cleanup proxies after each run
             print(f'[x] {err}; Deleting Fireprox APIs')
             delete_fireprox_apis(fp)
