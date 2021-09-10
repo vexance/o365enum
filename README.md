@@ -1,33 +1,68 @@
 # Office 365 User Enumeration
 
-Enumerate valid usernames from Office 365 using the office.com login page.
+Enumerate valid usernames from Office 365 using the office.com login page while optionally dodging throttling by rotating IPs with each request through Fireprox APIs.
 
 ## Usage
 
 o365enum will read usernames from the file provided as first parameter. The file should have one username per line.
 
 ```
-python3.6 o365enum.py -h
-usage: o365enum.py [-h] -u USERLIST [-v]
-                 
+python3 o365enum.py --help
+usage: o365enum.py [-h] [-u USERS] [-d DOMAIN] [--static] [-v] [--profile PROFILE] [--access-key ACCESS_KEY] [--secret-key SECRET_KEY] [--session-token SESSION_TOKEN] [--region REGION] command
+
 Office365 User Enumeration Script
+
+positional arguments:
+  command               Module / command to run [list,delete,enum]
 
 optional arguments:
   -h, --help            show this help message and exit
-  -u USERLIST, --userlist USERLIST
-                        username list one per line (default: None)
-  -v, --verbose         Enable verbose output at urllib level (default: False)
+  -u USERS, --users USERS
+                        Required for 'enum' module; File containing list of users / emails to enumerate
+  -d DOMAIN, --domain DOMAIN
+                        Email domain if not already included within user file
+  --static              Disable IP rotation via Fireprox APIs; O365 will throttle after ~100 requests
+  -v, --verbose         Enable verbose output at urllib level
+  --profile PROFILE     AWS profile within ~/.aws/credentials to use [default: default]
+  --access-key ACCESS_KEY
+                        AWS access key id for fireprox API creation
+  --secret-key SECRET_KEY
+                        AWS secret access key for fireprox API creation
+  --session-token SESSION_TOKEN
+                        AWS session token for assumed / temporary roles
+  --region REGION       AWS region to which fireprox API will be deployed [default: us-east-1]
 ```
 
-Example run:
-
+Example O365 username enumeration
 ```
-./o365enum.py -u users.txt
+./o365enum.py enum -u users.txt
+Creating => https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US...
+[2021-09-09 22:07:00-04:00] (abcdefghijklmno) fireprox_microsoftonline => https://abcdefghijklmno.execute-api.us-east-1.amazonaws.com/fireprox/ (https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US)
 nonexistent@contoso.com INVALID_USER
 existing@contoso.com VALID_USER
 possible@federateddomain.com DOMAIN_NOT_SUPPORTED
 notreal@badomain.com UNKNOWN_DOMAIN
 ```
+
+Example Fireprox API Listing
+```
+python3 o365enum.py list
+[2021-09-09 22:05:34-04:00] (abcdefghijklmno) fireprox_microsoftonline: https://abcdefghijklmno.execute-api.us-east-1.amazonaws.com/fireprox/ => https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US/
+```
+
+Example Deleation of all Fireprox APIs
+```
+python3 o365enum.py delete
+[+] Listing Fireprox APIs prior to deletion
+[2021-09-09 22:05:34-04:00] (abcdefghijklmno) fireprox_microsoftonline: https://abcdefghijklmno.execute-api.us-east-1.amazonaws.com/fireprox/ => https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US/
+[2021-09-09 22:07:00-04:00] (qwertyuiop) fireprox_microsoftonline: https://qwertyuiop.execute-api.us-east-1.amazonaws.com/fireprox/ => https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US/
+[+] Attempting to delete API 'abcdefghijklmno'
+[+] Attempting to delete API 'qwertyuiop'
+[+] Fireprox APIs following deletion:
+```
+> __Note:__<br/>
+> o365enum *should* automatically delete all Fireprox APIs when complete or in the event of an exception / keyboard interrupt during execution
+
 
 ## Office.com Enumeration
 
