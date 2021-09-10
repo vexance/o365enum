@@ -6,6 +6,8 @@ Enumerate valid usernames from Office 365 using the office.com login page.
 Author: Quentin Kaiser <quentin@gremwell.com>
 Author: Cameron Geehr @BarrelTit0r
 Author: Vexance @vexance
+
+Shoutout to @ustayready for the implementation of Fireprox APIs (fire.py)
 '''
 import random
 import re
