@@ -177,20 +177,20 @@ if __name__ == "__main__":
         requests_log.propagate = True
 
     # Fetch AWS access key info
-    try:
-        if (any([args.access_key, args.secret_key, args.session_token])):
-            aws_session = boto3.Session(args.access_key, args.secret_key, args.session_token)
-        else:
-            aws_session = boto3.Session(profile_name=args.profile)
-        args.access_key = aws_session.get_credentials().access_key
-        args.secret_key = aws_session.get_credentials().secret_key
-        args.session_token = aws_session.get_credentials().token
-    except botocore.exceptions.ProfileNotFound as err:
-        print(f'[x] {err}. Specify credentials here or include them as command arguments')
-        args.access_key = input('\tAWS Access Key Id: ')
-        args.secret_key = input('\tAWS Secret Access Key: ')
-
     if (not args.static):
+        try:
+            if (any([args.access_key, args.secret_key, args.session_token])):
+                aws_session = boto3.Session(args.access_key, args.secret_key, args.session_token)
+            else:
+                aws_session = boto3.Session(profile_name=args.profile)
+            args.access_key = aws_session.get_credentials().access_key
+            args.secret_key = aws_session.get_credentials().secret_key
+            args.session_token = aws_session.get_credentials().token
+        except botocore.exceptions.ProfileNotFound as err:
+            print(f'[x] {err}. Specify credentials here or include them as command arguments')
+            args.access_key = input('\tAWS Access Key Id: ')
+            args.secret_key = input('\tAWS Secret Access Key: ')
+
         fp = prep_proxy(args, 'https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
     
     # Run 'module'
