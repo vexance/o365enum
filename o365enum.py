@@ -5,6 +5,7 @@ Enumerate valid usernames from Office 365 using the office.com login page.
 
 Author: Quentin Kaiser <quentin@gremwell.com>
 Author: Cameron Geehr @BarrelTit0r
+Author: Vexance @vexance
 '''
 import random
 import re
@@ -12,13 +13,8 @@ import string
 import argparse
 import logging
 import requests
-import xml.etree.ElementTree as ET 
 from queue import Queue
 import threading
-import datetime
-import time
-import sys
-from bs4 import BeautifulSoup
 import fire
 import boto3, botocore
 
@@ -51,23 +47,15 @@ def o365enum_office(usernames: list, fireprox_url: str) -> None:
     
     # first we open office.com main page
     session = requests.session()
-    response = session.get(
-        "https://www.office.com",
-        headers=headers
-    )
+    response = session.get("https://www.office.com", headers=headers)
     # we get the application identifier and session identifier
     client_id = re.findall(b'"appId":"([^"]*)"', response.content)
-    # then we request the /login page which will redirect us to the authorize
-    # flow
-    response = session.get(
-        "https://www.office.com/login?es=Click&ru=/&msafed=0",
-        headers=headers,
-        allow_redirects=True
-    )
+    # then we request the /login page which will redirect us to the authorize flow
+    response = session.get("https://www.office.com/login?es=Click&ru=/&msafed=0", headers=headers, allow_redirects=True)
     hpgid = re.findall(b'hpgid":([0-9]+),', response.content)
     hpgact = re.findall(b'hpgact":([0-9]+),', response.content)
 
-    if not client_id or not hpgid or not hpgact:
+    if not all([client_id, hpgid, hpgact]):
         raise Exception("An error occured when generating headers.")
 
     # we setup the right headers to blend in
@@ -110,14 +98,10 @@ def o365enum_office(usernames: list, fireprox_url: str) -> None:
         # If it's managed, it's good to go and we can proceed
         # If it's anything else, don't bother checking
         # If it hasn't been checked yet, look up that user and get the domain info back
-        if username.index("@") > 0: # don't crash the program with an index out of bounds exception if a bad email is entered
-            domain = username.split("@")[1]
-        else:
-            domain = " "
+        domain = username[username.rfind('@')+1:] if ('@' in username) else ''
         if not domain in environments or environments[domain] == "MANAGED":
             payload["username"] = username
             response = session.post(fireprox_url, headers=headers, json=payload)
-            print(response.content)
             if response.status_code == 200:
                 throttleStatus = int(response.json()['ThrottleStatus'])
                 ifExistsResult = str(response.json()['IfExistsResult'])
@@ -172,6 +156,7 @@ if __name__ == "__main__":
     parser.add_argument('command',help='Module / command to run [list,delete,enum]')
     parser.add_argument('-u', '--users',default=False,required=False,help="Required for 'enum' module; File containing list of users / emails to enumerate")
     parser.add_argument('-d', '--domain',default=False,required=False,help="Email domain if not already included within user file")
+    parser.add_argument('--static', default=False,required=False,action='store_true',help="Disable IP rotation via Fireprox APIs; O365 will throttle after ~100 requests")
     parser.add_argument('-v', '--verbose', default=False, action='store_true',help='Enable verbose output at urllib level')
     parser.add_argument('--profile',default='default',help='AWS profile within ~/.aws/credentials to use [default: default]')
     parser.add_argument('--access-key', default=None,required=False,help='AWS access key id for fireprox API creation')
@@ -203,6 +188,7 @@ if __name__ == "__main__":
         args.access_key = input('\tAWS Access Key Id: ')
         args.secret_key = input('\tAWS Secret Access Key: ')
 
+    
     fp = prep_proxy(args, 'https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
     
     # Run 'module'
@@ -211,18 +197,24 @@ if __name__ == "__main__":
     elif (args.command == 'delete'):
         delete_fireprox_apis(fp)
     elif (args.command == 'enum'):
-        fireprox_url = fp.create_api('https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
-        users = load_usernames(args.users, args.domain)
-        #try:
-        o365enum_office(users, fireprox_url)
-        #except Exception as err:
-        #    print(f'[x] {err}; Deleting Fireprox APIs')
-        #    delete_fireprox_apis(fp)
+        # Select either a fireprox API to rotate IPs or use the client's actual public IP
+        try:
+            if (args.static):
+                endpoint = 'https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US'
+            else:
+                endpoint = fp.create_api('https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
+            
+            users = load_usernames(args.users, args.domain)
+            o365enum_office(users, endpoint)
+        except Exception as err: # Cleanup proxies after each run
+            print(f'[x] {err}; Deleting Fireprox APIs')
+            delete_fireprox_apis(fp)
+        except KeyboardInterrupt as err:
+            print('[+] Interrupt detected - deleting Fireprox APIs - CTRL-C again to force quit')
+            delete_fireprox_apis(fp)
+        
     else:
         print(f'[x] Invalid option \'{args.command}\' is not in [list,delete,enum]')
         parser.print_help()
-    exit()
-
-    o365enum_office(load_usernames(args.userlist))
 
     exit()
