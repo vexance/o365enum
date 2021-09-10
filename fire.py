@@ -180,6 +180,42 @@ class FireProx(object):
                   ],
                   "type": "http_proxy"
                 }
+              },
+              "post": {
+                "parameters": [
+                  {
+                    "name": "proxy",
+                    "in": "path",
+                    "required": true,
+                    "type": "string"
+                  },
+                  {
+                    "name": "X-My-X-Forwarded-For",
+                    "in": "header",
+                    "required": false,
+                    "type": "string"
+                  }
+                ],
+                "responses": {},
+                "x-amazon-apigateway-integration": {
+                  "uri": "{{url}}/",
+                  "responses": {
+                    "default": {
+                      "statusCode": "200"
+                    }
+                  },
+                  "requestParameters": {
+                    "integration.request.path.proxy": "method.request.path.proxy",
+                    "integration.request.header.X-Forwarded-For": "method.request.header.X-My-X-Forwarded-For"
+                  },
+                  "passthroughBehavior": "when_no_match",
+                  "httpMethod": "ANY",
+                  "cacheNamespace": "irx7tm",
+                  "cacheKeyParameters": [
+                    "method.request.path.proxy"
+                  ],
+                  "type": "http_proxy"
+                }
               }
             },
             "/{proxy+}": {
