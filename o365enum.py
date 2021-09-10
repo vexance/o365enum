@@ -190,13 +190,13 @@ if __name__ == "__main__":
         args.access_key = input('\tAWS Access Key Id: ')
         args.secret_key = input('\tAWS Secret Access Key: ')
 
-    
-    fp = prep_proxy(args, 'https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
+    if (not args.static):
+        fp = prep_proxy(args, 'https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
     
     # Run 'module'
-    if (args.command == 'list'):
+    if (args.command == 'list' and (not args.static)):
         list_fireprox_apis(fp)
-    elif (args.command == 'delete'):
+    elif (args.command == 'delete' and (not args.static)):
         delete_fireprox_apis(fp)
     elif (args.command == 'enum'):
         # Select either a fireprox API to rotate IPs or use the client's actual public IP
@@ -208,13 +208,18 @@ if __name__ == "__main__":
             
             users = load_usernames(args.users, args.domain)
             o365enum_office(users, endpoint)
-            delete_fireprox_apis(fp)
+            if (not args.static):
+                delete_fireprox_apis(fp)
         except Exception as err: # Cleanup proxies after each run
-            print(f'[x] {err}; Deleting Fireprox APIs')
-            delete_fireprox_apis(fp)
+            if (not args.static):
+                print(f'[x] {err}; Deleting Fireprox APIs')
+                delete_fireprox_apis(fp)
+            else:
+                print(f'[x] {err}')
         except KeyboardInterrupt as err:
-            print('[+] Interrupt detected - deleting Fireprox APIs - CTRL-C again to force quit')
-            delete_fireprox_apis(fp)
+            if (not args.static):
+                print('[+] Interrupt detected - deleting Fireprox APIs - CTRL-C again to force quit')
+                delete_fireprox_apis(fp)
         
     else:
         print(f'[x] Invalid option \'{args.command}\' is not in [list,delete,enum]')
