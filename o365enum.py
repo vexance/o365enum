@@ -3,33 +3,49 @@
 Office365 User Enumeration script.
 Enumerate valid usernames from Office 365 using the office.com login page.
 
-Author: Quentin Kaiser <quentin@gremwell.com>
-Author: Cameron Geehr @BarrelTit0r
-Author: Vexance @vexance
+Author: Quentin Kaiser <quentin@gremwell.com> (original)
+Author: Cameron Geehr @BarrelTit0r (refined and removed login attempt requirement)
+Author: Vexance @vexance (integration of fireprox APIs and reformatted output)
 
 Shoutout to @ustayready for the implementation of Fireprox APIs (fire.py)
 '''
-import random
-import re
-import string
-import argparse
-import logging
-import requests
+import io, logging, random, re, requests, string, termcolor, threading
 from queue import Queue
-import threading
+import argparse, botocore, boto3
 import fire
-import boto3, botocore
 
 mutex = threading.Lock()
 count_queue = Queue()
 search_results = set()
-
 
 try:
     import http.client as http_client
 except ImportError:
     import httplib as http_client
 
+
+def print_status(status_type: str, text: str, file_handle: io.TextIOWrapper = None) -> None:
+    '''Print text to terminal / append to file if specified'''
+    if status_type != '':
+        status_type = f'[{status_type.lower()}]'
+
+    color = 'white'
+    if status_type == '[x]':
+        color = 'orange'
+    elif status_type == '[!]':
+        color = 'yellow'
+    elif status_type == '[-]':
+        color = 'red'
+    elif status_type == '[*]':
+        color = 'blue'
+    elif status_type == '[+]':
+        color = 'green'
+    print(f'{termcolor.colored(status_type, color)} {text}')
+
+    if file_handle:
+        file_handle.write(f'{termcolor.colored(status_type, color)} {text}\n')
+    
+    return  None
 
 def load_usernames(usernames_file: str, domain: str = False) -> list:
     ''' Load usernames from provided file; returns usernames as list<str>'''
@@ -43,7 +59,7 @@ def load_usernames(usernames_file: str, domain: str = False) -> list:
     return user_list
 
 
-def o365enum_office(usernames: list, fireprox_url: str) -> None:
+def o365enum_office(usernames: list, fireprox_url: str, fhandle: io.TextIOWrapper = None) -> None:
     '''Check a list of usernames for validity via office.com method'''
     headers = { "User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36" }
     
@@ -112,14 +128,21 @@ def o365enum_office(usernames: list, fireprox_url: str) -> None:
                 if environments[domain] == "MANAGED":
                     # NotThrottled:0,AadThrottled:1,MsaThrottled:2
                     if not throttleStatus == 0:
-                        print("POSSIBLE THROTTLE DETECTED ON REQUEST FOR {}".format(username))
-                    print("{} {}".format(username, ifExistsResultCodes[ifExistsResult]))
+                        print_status('!', f'{username} - Possible throttle detected on request', fhandle)
+                    if ifExistsResult in ['0', '6']: #Valid user found!
+                        print_status('+', f'{username} - Valid user', fhandle)
+                    elif ifExistsResult == '5': # Different identity provider, but still a valid email address
+                        print_status('*', f'{username} - Valid user with different IDP', fhandle)
+                    elif ifExistsResult == '1':
+                        print_status('-', f'{username} - Invalid user', fhandle)
+                    else:                    
+                        print_status('!', f'{username} - {ifExistsResultCodes[ifExistsResult]}', fhandle)
                 else:
-                    print("{} DOMAIN TYPE {} NOT SUPPORTED".format(username, environments[domain]))
+                    print_status('!', f'{username} - Domain type \'{environments[domain]}\' not supported', fhandle)
             else:
-                print("{} REQUEST ERROR".format(username))
+                print_status('!', f'{username} - Request error', fhandle)
         else:
-            print("{} DOMAIN TYPE {} NOT SUPPORTED".format(username, environments[domain]))
+            print_status('!', f'{username} - Domain type \'{environments[domain]}\' not supported', fhandle)
 
 
 def prep_proxy(args: argparse.Namespace, url: str) -> fire.FireProx:
@@ -144,12 +167,13 @@ def list_fireprox_apis(fp: fire.FireProx) -> list:
 
 def delete_fireprox_apis(fp: fire.FireProx) -> list:
     """Removes all Fireprox APIs within an AWS account"""
-    print('[+] Listing Fireprox APIs prior to deletion')
+    print_status('*', 'Listing Fireprox APIs prior to deletion')
+    #print('[+] Listing Fireprox APIs prior to deletion')
     ids = list_fireprox_apis(fp)
     for prox in ids:
-        print(f'[+] Attempting to delete API \'{prox}\'')
+        print_status(f'+', f'Attempting to delete API \'{prox}\'')
         fp.delete_api(prox)
-    print('[+] Fireprox APIs following deletion:')
+    print('*', 'Fireprox APIs following deletion:')
     return list_fireprox_apis(fp) # Should be empty list []
     
 
@@ -160,6 +184,7 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--domain',default=False,required=False,help="Email domain if not already included within user file")
     parser.add_argument('--static', default=False,required=False,action='store_true',help="Disable IP rotation via Fireprox APIs; O365 will throttle after ~100 requests")
     parser.add_argument('-v', '--verbose', default=False, action='store_true',help='Enable verbose output at urllib level')
+    parser.add_argument('-o', '--outfile', default=None, help='File to output results to [default: None')
     parser.add_argument('--profile',default='default',help='AWS profile within ~/.aws/credentials to use [default: default]')
     parser.add_argument('--access-key', default=None,required=False,help='AWS access key id for fireprox API creation')
     parser.add_argument('--secret-key',default=None,required=False,help='AWS secret access key for fireprox API creation')
@@ -193,12 +218,16 @@ if __name__ == "__main__":
 
         fp = prep_proxy(args, 'https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
     
-    # Run 'module'
+   # Run 'module'
     if (args.command == 'list' and (not args.static)):
         list_fireprox_apis(fp)
     elif (args.command == 'delete' and (not args.static)):
         delete_fireprox_apis(fp)
     elif (args.command == 'enum'):
+        outfile_handle = None
+        if (args.outfile):
+            outfile_handle = open(args.outfile, 'w+')
+
         # Select either a fireprox API to rotate IPs or use the client's actual public IP
         try:
             if (args.static):
@@ -207,22 +236,25 @@ if __name__ == "__main__":
                 endpoint = fp.create_api('https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
             
             users = load_usernames(args.users, args.domain)
-            o365enum_office(users, endpoint)
+            o365enum_office(users, endpoint, outfile_handle)
+            outfile_handle.close()
             if (not args.static):
                 delete_fireprox_apis(fp)
         except Exception as err: # Cleanup proxies after each run
+            outfile_handle.close()
             if (not args.static):
-                print(f'[x] {err}; Deleting Fireprox APIs')
+                print_status('x', f'{err}; Deleting Fireprox APIs')
                 delete_fireprox_apis(fp)
             else:
-                print(f'[x] {err}')
+                print_status('x', f'{err}')
         except KeyboardInterrupt as err:
+            outfile_handle.close()
             if (not args.static):
-                print('[+] Interrupt detected - deleting Fireprox APIs - CTRL-C again to force quit')
+                print('!',  'Interrupt detected - deleting Fireprox APIs - CTRL-C again to force quit')
                 delete_fireprox_apis(fp)
         
     else:
-        print(f'[x] Invalid option \'{args.command}\' is not in [list,delete,enum]')
+        print_status('x', f'Invalid option \'{args.command}\' is not in [list,delete,enum]')
         parser.print_help()
 
     exit()
