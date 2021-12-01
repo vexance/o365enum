@@ -8,7 +8,7 @@ o365enum will read usernames from the file provided as first parameter. The file
 
 ```
 python3 o365enum.py --help
-usage: o365enum.py [-h] [-u USERS] [-d DOMAIN] [--static] [-v] [--profile PROFILE] [--access-key ACCESS_KEY] [--secret-key SECRET_KEY] [--session-token SESSION_TOKEN] [--region REGION] command
+usage: o365enum.py [-h] [-u USERS] [-d DOMAIN] [--static] [-v] [-o OUTFILE] [--profile PROFILE] [--access-key ACCESS_KEY] [--secret-key SECRET_KEY] [--session-token SESSION_TOKEN] [--region REGION] command
 
 Office365 User Enumeration Script
 
@@ -23,6 +23,7 @@ optional arguments:
                         Email domain if not already included within user file
   --static              Disable IP rotation via Fireprox APIs; O365 will throttle after ~100 requests
   -v, --verbose         Enable verbose output at urllib level
+  -o, --outfile         File to output results to [default: None]
   --profile PROFILE     AWS profile within ~/.aws/credentials to use [default: default]
   --access-key ACCESS_KEY
                         AWS access key id for fireprox API creation
