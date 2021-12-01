@@ -4,7 +4,7 @@ Office365 User Enumeration script.
 Enumerate valid usernames from Office 365 using the office.com login page.
 
 Author: Quentin Kaiser <quentin@gremwell.com> (original)
-Author: Cameron Geehr @BarrelTit0r (refined and removed login attempt requirement)
+Author: Cameron Geehr @BarrelTit0r (enhanced / refined functionality)
 Author: Vexance @vexance (integration of fireprox APIs and reformatted output)
 
 Shoutout to @ustayready for the implementation of Fireprox APIs (fire.py)
