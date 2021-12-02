@@ -30,9 +30,7 @@ def print_status(status_type: str, text: str, file_handle: io.TextIOWrapper = No
         status_type = f'[{status_type.lower()}]'
 
     color = 'white'
-    if status_type == '[x]':
-        color = 'orange'
-    elif status_type == '[!]':
+    if status_type == '[!]' or status_type == '[x]':
         color = 'yellow'
     elif status_type == '[-]':
         color = 'red'
@@ -171,9 +169,9 @@ def delete_fireprox_apis(fp: fire.FireProx) -> list:
     #print('[+] Listing Fireprox APIs prior to deletion')
     ids = list_fireprox_apis(fp)
     for prox in ids:
-        print_status(f'+', f'Attempting to delete API \'{prox}\'')
+        print_status(f'!', f'Attempting to delete API \'{prox}\'')
         fp.delete_api(prox)
-    print('*', 'Fireprox APIs following deletion:')
+    print_status('*', 'Fireprox APIs following deletion:')
     return list_fireprox_apis(fp) # Should be empty list []
     
 
@@ -225,9 +223,6 @@ if __name__ == "__main__":
         delete_fireprox_apis(fp)
     elif (args.command == 'enum'):
         outfile_handle = None
-        if (args.outfile):
-            outfile_handle = open(args.outfile, 'w+')
-
         # Select either a fireprox API to rotate IPs or use the client's actual public IP
         try:
             if (args.static):
@@ -236,19 +231,21 @@ if __name__ == "__main__":
                 endpoint = fp.create_api('https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US')
             
             users = load_usernames(args.users, args.domain)
-            o365enum_office(users, endpoint, outfile_handle)
-            outfile_handle.close()
+            
+            if (args.outfile):
+                with open(args.outfile, 'w+') as outfile_handle:
+                    o365enum_office(users, endpoint, outfile_handle)
+            else:
+                o365enum_office(users, endpoint)
             if (not args.static):
                 delete_fireprox_apis(fp)
         except Exception as err: # Cleanup proxies after each run
-            outfile_handle.close()
             if (not args.static):
                 print_status('x', f'{err}; Deleting Fireprox APIs')
                 delete_fireprox_apis(fp)
             else:
                 print_status('x', f'{err}')
         except KeyboardInterrupt as err:
-            outfile_handle.close()
             if (not args.static):
                 print('!',  'Interrupt detected - deleting Fireprox APIs - CTRL-C again to force quit')
                 delete_fireprox_apis(fp)
