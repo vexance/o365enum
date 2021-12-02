@@ -8,7 +8,7 @@ o365enum will read usernames from the file provided as first parameter. The file
 
 ```
 python3 o365enum.py --help
-usage: o365enum.py [-h] [-u USERS] [-d DOMAIN] [--static] [-v] [--profile PROFILE] [--access-key ACCESS_KEY] [--secret-key SECRET_KEY] [--session-token SESSION_TOKEN] [--region REGION] command
+usage: o365enum.py [-h] [-u USERS] [-d DOMAIN] [--static] [-v] [-o OUTFILE] [--profile PROFILE] [--access-key ACCESS_KEY] [--secret-key SECRET_KEY] [--session-token SESSION_TOKEN] [--region REGION] command
 
 Office365 User Enumeration Script
 
@@ -23,6 +23,7 @@ optional arguments:
                         Email domain if not already included within user file
   --static              Disable IP rotation via Fireprox APIs; O365 will throttle after ~100 requests
   -v, --verbose         Enable verbose output at urllib level
+  -o, --outfile         File to output results to [default: None]
   --profile PROFILE     AWS profile within ~/.aws/credentials to use [default: default]
   --access-key ACCESS_KEY
                         AWS access key id for fireprox API creation
@@ -38,10 +39,18 @@ Example O365 username enumeration
 ./o365enum.py enum -u users.txt
 Creating => https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US...
 [2021-09-09 22:07:00-04:00] (abcdefghijklmno) fireprox_microsoftonline => https://abcdefghijklmno.execute-api.us-east-1.amazonaws.com/fireprox/ (https://login.microsoftonline.com/common/GetCredentialType?mkt=en-US)
-nonexistent@contoso.com INVALID_USER
-existing@contoso.com VALID_USER
-possible@federateddomain.com DOMAIN_NOT_SUPPORTED
-notreal@badomain.com UNKNOWN_DOMAIN
+[-] first.last@example.com - Invalid user
+[*] flast@example.com - Valid user with different IDP
+[-] first.last2@example.com - Invalid user
+[+] flast2@example.com - Valid user
+[+] flast3@example.com - Valid user
+[!] f.last@nonexistant.example.com. - Domain type 'UNKNOWN' not supported
+[+] flast4@example.com - Valid user
+[-] first.last3@example.com - Invalid user
+[+] flast5@example.com - Valid user
+[-] f.last2@example.com - Invalid user
+[!] f.last3@example.com - Possible throttle detected on request
+[-] f.last3@example.com - Invalid user
 ```
 
 Example Fireprox API Listing
@@ -241,3 +250,4 @@ Content-Length: 579
 * [@jenic](https://github.com/jenic) - Arguments parsing and false negative reduction.
 * [@gremwell](https://github.com/gremwell) - Original script author
 * [@BarrelTit0r](https://github.com/BarrelTit0r) - Enhancement and refinement of user enumeration functionality
+* [@Vexance](https://github.com/vexance) - IP rotation through FireProx APIs and outfile / output reformatting
