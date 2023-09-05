@@ -2,6 +2,10 @@
 
 Enumerate valid usernames from Office 365 using the office.com login page while optionally dodging throttling by rotating IPs with each request through Fireprox APIs.
 
+# WARNING! This Repository Is Deprecated
+
+> This repository is now considered deprecated and will no longer receive further support. This tool has been refactored into a module within Stratustryke (https://github.com/vexance/Stratustryke). Refer to the Stratustryke repository and leverage the `m365/enum/unauth/m365_enum_users_managed` module for similar functionality.
+
 ## Usage
 
 o365enum will read usernames from the file provided as first parameter. The file should have one username per line.
